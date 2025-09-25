@@ -167,6 +167,11 @@ jobs:
     needs: [test, build]
     if: github.event_name != 'pull_request'  # Ne déployer que sur push/manual
     
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    
     outputs:
       uri: ${{ steps.deploy.outputs.uri }}
       resource-group: ${{ steps.deploy.outputs.resource-group }}
@@ -212,12 +217,27 @@ jobs:
         
         # Vérifier l'installation
         azd version
+        
+    - name: 🔐 Configure AZD Authentication
+      run: |
+        # AZD utilise les variables d'environnement Azure pour l'authentification OIDC
+        echo "🔑 Configuration de l'authentification AZD avec OIDC..."
+        
+        # Les variables d'environnement sont déjà définies au niveau du job
+        echo "✅ Variables d'environnement Azure configurées"
+        echo "📋 AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:0:8}..."
+        echo "📋 AZURE_TENANT_ID: ${AZURE_TENANT_ID:0:8}..."
+        echo "📋 AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:0:8}..."
+        
+        # Configurer AZD pour utiliser l'authentification héritée
+        echo "� Test de l'authentification AZD..."
+        azd auth login --check-status || echo "Authentification AZD via variables d'environnement"
       
     - name: 🔧 Configure AZD Environment
       run: |
         # Initialiser l'environnement AZD si nécessaire
         if [ ! -f ".azure/${{ env.AZURE_ENV_NAME }}/.env" ]; then
-          azd env new ${{ env.AZURE_ENV_NAME }} --location ${{ vars.AZURE_LOCATION || 'eastus' }} --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          azd env new ${{ env.AZURE_ENV_NAME }} --location ${{ vars.AZURE_LOCATION || 'eastus' }} --subscription $AZURE_SUBSCRIPTION_ID
         fi
         
         azd config set alpha.resourceGroupDeployments on
@@ -225,20 +245,20 @@ jobs:
         # Configuration des variables d'environnement
         azd env set AZURE_ENV_NAME ${{ env.AZURE_ENV_NAME }}
         azd env set AZURE_LOCATION ${{ vars.AZURE_LOCATION || 'eastus' }}
-        azd env set AZURE_SUBSCRIPTION_ID ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        azd env set AZURE_SUBSCRIPTION_ID $AZURE_SUBSCRIPTION_ID
         
         # Variables spécifiques à l'application
         azd env set APP_VERSION ${{ github.sha }}
         azd env set CONTAINER_IMAGE chatbot-web-scraper:${{ github.sha }}
         
     - name: 🏗️ Provision Azure Infrastructure
-      run: azd provision --no-prompt
+      run: azd provision --no-prompt --subscription $AZURE_SUBSCRIPTION_ID
           
     - name: 🚀 Deploy Application
       id: deploy
       run: |
         # Déploiement avec azd
-        azd deploy --no-prompt
+        azd deploy --no-prompt --subscription $AZURE_SUBSCRIPTION_ID
         
         # Récupérer l'URL de l'application avec plusieurs tentatives
         APP_URL=""
