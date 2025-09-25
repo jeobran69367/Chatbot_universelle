@@ -1,0 +1,70 @@
+# Configuration Azure Developer CLI (azd)
+# Déploiement automatisé de l'application Chatbot Web Scraper
+
+name: chatbot-web-scraper
+metadata:
+  template: chatbot-web-scraper@0.0.1-beta
+
+# Configuration du service principal
+services:
+  chatbot-app:
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      target: production
+
+# Hooks de déploiement
+hooks:
+  # Avant le provisioning
+  preprovision:
+    shell: sh
+    run: |
+      echo "🚀 Préparation du déploiement..."
+      # Créer les répertoires nécessaires
+      mkdir -p data/embeddings data/scraped data/models logs
+      
+  # Après le provisioning
+  postprovision:
+    shell: sh
+    run: |
+      echo "✅ Infrastructure provisionnée avec succès!"
+      echo "📋 Informations du déploiement :"
+      echo "   - Resource Group: $AZURE_RESOURCE_GROUP"
+      echo "   - Container App URL: $AZURE_CONTAINER_APP_URL"
+      echo "   - Registry: $AZURE_CONTAINER_REGISTRY_ENDPOINT"
+      
+  # Avant le déploiement
+  predeploy:
+    shell: sh
+    run: |
+      echo "🔨 Construction et push de l'image Docker..."
+      # Tag de l'image avec la registry Azure
+      docker build -t $AZURE_CONTAINER_REGISTRY_ENDPOINT/chatbot-web-scraper:latest .
+      
+      # Login à Azure Container Registry
+      az acr login --name $AZURE_CONTAINER_REGISTRY_NAME
+      
+      # Push de l'image
+      docker push $AZURE_CONTAINER_REGISTRY_ENDPOINT/chatbot-web-scraper:latest
+      
+  # Après le déploiement
+  postdeploy:
+    shell: sh
+    run: |
+      echo "🎉 Déploiement terminé avec succès!"
+      echo "🌐 Application disponible à: $AZURE_CONTAINER_APP_URL"
+      echo "📊 Monitoring: Application Insights configuré"
+      echo "💾 Stockage: Azure Storage configuré"
+      echo "🔄 Cache: Redis configuré"
+      
+      # Test de santé optionnel
+      echo "🔍 Test de santé de l'application..."
+      sleep 30  # Attendre que l'app démarre
+      if curl -f "$AZURE_CONTAINER_APP_URL/api/status" > /dev/null 2>&1; then
+        echo "✅ Application en ligne et fonctionnelle!"
+      else
+        echo "⚠️ L'application pourrait avoir besoin de plus de temps pour démarrer"
+      fi

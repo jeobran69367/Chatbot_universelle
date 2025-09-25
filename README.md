@@ -2,27 +2,101 @@
 
 Un chatbot intelligent capable de scraper des sites web, vectoriser le contenu et répondre aux questions en utilisant **Ollama** (LLaMA, Mistral, etc.) et des techniques de RAG (Retrieval Augmented Generation) - **100% local et privé**.
 
+## 🚀 **DÉPLOIEMENT PROFESSIONNEL DOCKER + AZURE** 
+
+Ce projet est maintenant équipé d'une **infrastructure complète de déploiement** :
+- 🐳 **Docker & Docker Compose** pour le développement local
+- ☁️ **Azure Container Apps** pour la production 
+- 🔄 **CI/CD Pipeline GitHub Actions** 
+- 📊 **Monitoring intégré** (Prometheus, Grafana, Application Insights)
+- 🛡️ **Sécurité et bonnes pratiques**
+
 ## ✨ Fonctionnalités
 
 - 🕷️ **Web Scraping Avancé**: Scrape automatiquement un site web et toutes ses pages liées
 - 🧠 **Intelligence Artificielle Locale**: Utilise Ollama avec LLaMA 3.1, Mistral ou d'autres modèles open-source
 - 📊 **Base de Données Vectorielle**: Stocke et recherche efficacement dans le contenu scrapé
-- 🎨 **Interface Intuitive**: Interface web moderne avec Streamlit
+- 🎨 **Interface Intuitive**: Interface web moderne avec Streamlit + API Flask
 - 🔍 **Recherche Sémantique**: Trouve le contenu pertinent pour chaque question
 - 💬 **Conversation Contextuelle**: Maintient l'historique des conversations
 - 🔒 **100% Privé**: Toutes les données restent en local, aucune API externe requise
 - 🎭 **Prompts Personnalisables**: Styles de réponse adaptables (défaut, expert, casual)
+- 🔄 **Cache Redis** : Performance optimisée avec cache distribué
+- 📈 **Monitoring complet** : Métriques, logs centralisés, alertes
 
 ## 🛠️ Technologies Utilisées
 
-- **Frontend**: Streamlit
+### Stack Application
+- **Frontend**: Streamlit + API Flask
 - **AI/ML**: Ollama (LLaMA, Mistral, etc.), Sentence Transformers
-- **Web Scraping**: BeautifulSoup, Selenium, Requests
+- **Web Scraping**: BeautifulSoup, Selenium, Requests, Scrapy
 - **Base de Données Vectorielle**: ChromaDB ou FAISS
+- **Cache**: Redis pour sessions et performance
 - **Traitement de Texte**: NLTK, spaCy, LangChain
-- **Langages**: Python 3.8+
+- **Langages**: Python 3.11+
 
-## 📦 Installation
+### Stack Infrastructure
+- **🐳 Containerisation**: Docker, Docker Compose
+- **☁️ Cloud**: Azure Container Apps, Azure Storage, Redis Cache
+- **🔄 CI/CD**: GitHub Actions, Azure DevOps
+- **📊 Monitoring**: Application Insights, Prometheus, Grafana
+- **🛡️ Sécurité**: Managed Identity, Key Vault, HTTPS/TLS
+- **🏗️ IaC**: Azure Bicep, Azure Developer CLI (azd)
+
+## � Démarrage Rapide
+
+### ⚡ Installation & Déploiement Ultra-Rapide
+
+```bash
+# 1. Cloner le projet
+git clone <votre-repo>
+cd Model
+
+# 2. Configuration initiale complète
+make setup
+
+# 3. Déploiement local avec Docker
+make up
+
+# 4. Vérifier que tout fonctionne
+make health
+```
+
+**🌐 Application disponible sur http://localhost**
+
+---
+
+## �📦 Installation Détaillée
+
+### 🐳 Option A : Déploiement Docker (Recommandé)
+
+```bash
+# Configuration et déploiement en une commande
+make setup && make up
+
+# Avec monitoring (Prometheus + Grafana)
+make deploy-local-monitoring
+
+# Accès aux services
+# - Application: http://localhost
+# - API: http://localhost/api
+# - Grafana: http://localhost:3000 (admin/admin123)
+# - Prometheus: http://localhost:9090
+```
+
+### ☁️ Option B : Déploiement Azure
+
+```bash
+# Prérequis: Azure CLI + azd installés
+az login
+
+# Déploiement complet sur Azure
+make deploy-azure
+
+# URL générée automatiquement: https://votre-app.azurecontainerapps.io
+```
+
+### 🛠️ Option C : Installation Manuelle
 
 ### 1. Cloner le projet
 ```bash
@@ -352,13 +426,85 @@ Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 - La communauté **ChromaDB** pour la base de données vectorielle
 - Tous les contributeurs des librairies open-source utilisées
 
-## 📞 Support
+## � Commandes Make Utiles
+
+| Commande | Description |
+|----------|-------------|
+| `make help` | Afficher toutes les commandes disponibles |
+| `make setup` | Configuration initiale complète |
+| `make up` | Démarrer l'application localement |
+| `make deploy-azure` | Déployer sur Azure |
+| `make logs` | Voir les logs en temps réel |
+| `make health` | Vérifier l'état de l'application |
+| `make clean` | Nettoyer les fichiers temporaires |
+| `make backup` | Sauvegarder les données |
+
+## 📋 Architecture de Production
+
+```
+                    ┌─────────────────┐
+                    │   GitHub Repo   │
+                    │   (CI/CD Push)  │
+                    └─────────┬───────┘
+                              │
+                    ┌─────────▼───────┐
+                    │ GitHub Actions  │
+                    │ (Build & Deploy)│
+                    └─────────┬───────┘
+                              │
+        ┌─────────────────────▼─────────────────────┐
+        │            Azure Container Apps           │
+        │  ┌─────────────────┐ ┌─────────────────┐ │
+        │  │   Streamlit     │ │    Ollama       │ │
+        │  │   (Port 8501)   │ │  (Port 11434)   │ │
+        │  └─────────────────┘ └─────────────────┘ │
+        │  ┌─────────────────┐ ┌─────────────────┐ │
+        │  │   Flask API     │ │   ChromaDB      │ │
+        │  │   (Port 5001)   │ │  (Embeddings)   │ │
+        │  └─────────────────┘ └─────────────────┘ │
+        └─────────────────────┬─────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │  ┌─────────────────┐│┌─────────────────┐  │
+        │  │  Azure Storage  │││   Redis Cache   │  │
+        │  │  (Persistent)   │││   (Sessions)    │  │
+        │  └─────────────────┘│└─────────────────┘  │
+        │  ┌─────────────────┐│┌─────────────────┐  │
+        │  │App Insights     │││  Log Analytics  │  │
+        │  │(Monitoring)     │││    (Logs)       │  │
+        │  └─────────────────┘│└─────────────────┘  │
+        └──────────────────────────────────────────┘
+```
+
+## 🔗 Liens Utiles
+
+- 📖 **Documentation complète** : [DEPLOYMENT.md](./DEPLOYMENT.md)
+- 🐳 **Guide Docker** : Voir `docker-compose.yml`
+- ☁️ **Configuration Azure** : Voir `infra/main.bicep`
+- 🔄 **Pipeline CI/CD** : Voir `.github/workflows/`
+- 📊 **Monitoring** : Voir `monitoring/prometheus.yml`
+
+## �📞 Support
 
 Pour des questions ou du support :
-- Ouvrez une issue sur GitHub
-- Consultez la documentation des modules individuels
-- Vérifiez les logs d'application
+- 📋 **Ouvrez une issue** sur GitHub
+- 📖 **Consultez** `DEPLOYMENT.md` pour les détails de déploiement
+- 🔍 **Vérifiez les logs** : `make logs` (local) ou `make logs-azure` (Azure)
+- 🏥 **Status santé** : `make health`
+
+## 🆕 Nouveautés v2.0
+
+- ✅ **Déploiement Docker complet** avec orchestration
+- ✅ **Infrastructure Azure** automatisée avec Bicep
+- ✅ **CI/CD Pipeline** GitHub Actions
+- ✅ **Monitoring intégré** (Prometheus, Grafana, App Insights)
+- ✅ **Cache Redis** pour améliorer les performances
+- ✅ **Sécurité renforcée** (Managed Identity, HTTPS)
+- ✅ **Scripts automatisés** pour simplifier le déploiement
+- ✅ **Documentation complète** et guides d'utilisation
 
 ---
 
-**Développé avec ❤️ pour l'intelligence artificielle et la recherche sémantique.**
+**Développé avec ❤️ pour l'intelligence artificielle, la recherche sémantique et l'infrastructure moderne.**
+
+🚀 **Prêt pour la production - Scalable - Sécurisé - Monitored**

@@ -1,0 +1,48 @@
+# Configuration Prometheus pour Chatbot Web Scraper
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Monitoring de l'application principale
+  - job_name: 'chatbot-app'
+    static_configs:
+      - targets: ['chatbot-app:8501', 'chatbot-app:5001']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+  # Monitoring Nginx
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    scrape_interval: 30s
+    
+  # Monitoring Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+    
+  # Monitoring Ollama (si disponible)
+  - job_name: 'ollama'
+    static_configs:
+      - targets: ['ollama:11434']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+  # Self-monitoring Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+# Configuration des alertes (optionnel)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093

@@ -1,0 +1,221 @@
+# Docker Compose pour le déploiement complet de l'application Chatbot Web Scraper
+# Configuré pour développement local et production
+
+version: '3.8'
+
+services:
+  #============================================================================
+  # Service Principal: Application Chatbot
+  #============================================================================
+  chatbot-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: chatbot-web-scraper
+    restart: unless-stopped
+    ports:
+      - "8501:8501"  # Streamlit UI
+      - "5001:5001"  # Flask API
+    environment:
+      - APP_ENV=production
+      - PYTHONPATH=/app
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.1:latest
+      - CHROMA_DB_PATH=/app/data/embeddings
+      - LOG_LEVEL=INFO
+      - FLASK_ENV=production
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_PORT=8501
+    volumes:
+      # Données persistantes
+      - chatbot_data:/app/data
+      - chatbot_logs:/app/logs
+      - blob_storage:/app/__blobstorage__
+    depends_on:
+      - ollama
+      - redis
+    networks:
+      - chatbot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  #============================================================================
+  # Service Ollama: Modèles IA Locaux
+  #============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: chatbot-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - chatbot-network
+    # Support GPU (optionnel)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  #============================================================================
+  # Service Redis: Cache et Sessions
+  #============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: chatbot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-chatbot123}
+    volumes:
+      - redis_data:/data
+    networks:
+      - chatbot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+
+  #============================================================================
+  # Service Nginx: Proxy Inverse et Load Balancer
+  #============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: chatbot-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - chatbot-app
+    networks:
+      - chatbot-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  #============================================================================
+  # Service de Monitoring: Prometheus (optionnel)
+  #============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: chatbot-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - chatbot-network
+    profiles:
+      - monitoring
+
+  #============================================================================
+  # Service de Visualisation: Grafana (optionnel)
+  #============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: chatbot-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - chatbot-network
+    profiles:
+      - monitoring
+
+#==============================================================================
+# Configuration des Volumes Persistants
+#==============================================================================
+volumes:
+  # Données de l'application
+  chatbot_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}
+  
+  chatbot_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_PATH:-./logs}
+  
+  blob_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${BLOB_PATH:-./blob_storage}
+  
+  # Modèles Ollama
+  ollama_models:
+    driver: local
+  
+  # Cache Redis
+  redis_data:
+    driver: local
+  
+  # Logs Nginx
+  nginx_logs:
+    driver: local
+  
+  # Monitoring
+  prometheus_data:
+    driver: local
+  
+  grafana_data:
+    driver: local
+
+#==============================================================================
+# Configuration Réseau
+#==============================================================================
+networks:
+  chatbot-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

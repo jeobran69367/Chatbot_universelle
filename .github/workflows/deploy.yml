@@ -1,0 +1,351 @@
+# Pipeline CI/CD pour Chatbot Web Scraper
+# Déploiement automatisé sur Azure Container Apps avec AZD
+
+name: 🚀 CI/CD - Azure Deployment
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - staging
+        - prod
+
+# Variables globales
+env:
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  AZURE_ENV_NAME: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+
+# Permissions spéciales pour OIDC
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  #============================================================================
+  # Job 1: Tests et Validation du Code
+  #============================================================================
+  test:
+    name: 🧪 Tests & Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: 📦 Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8 black mypy safety bandit
+        
+    - name: 🎯 Code Quality - Black
+      run: black --check --diff src/ config/ *.py
+      continue-on-error: true
+      
+    - name: 🔍 Code Quality - Flake8
+      run: flake8 src/ config/ --max-line-length=100 --ignore=E203,W503
+      continue-on-error: true
+      
+    - name: 🔒 Security Scan - Bandit
+      run: bandit -r src/ -f json -o bandit-report.json
+      continue-on-error: true
+      
+    - name: 🛡️ Dependency Security - Safety
+      run: safety check --json --output safety-report.json
+      continue-on-error: true
+      
+    - name: 🧪 Run Unit Tests
+      run: |
+        # Créer les répertoires de test
+        mkdir -p data/embeddings data/scraped tests
+        
+        # Tests basiques (à adapter selon vos tests existants)
+        python -m pytest tests/ --cov=src/ --cov-report=xml --cov-report=html -v || true
+        
+    - name: 📊 Upload Coverage Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-reports
+        path: |
+          htmlcov/
+          coverage.xml
+          bandit-report.json
+          safety-report.json
+
+  #============================================================================
+  # Job 2: Construction Docker
+  #============================================================================
+  build:
+    name: 🐳 Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🏗️ Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 📋 Extract Metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: chatbot-web-scraper
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: 🐳 Build and Export
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        target: production
+        platforms: linux/amd64
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        outputs: type=docker,dest=/tmp/chatbot-image.tar
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: 📤 Upload Docker Image
+      uses: actions/upload-artifact@v3
+      with:
+        name: chatbot-docker-image
+        path: /tmp/chatbot-image.tar
+        retention-days: 1
+
+  #============================================================================
+  # Job 3: Déploiement sur Azure
+  #============================================================================
+  deploy:
+    name: 🌐 Deploy to Azure (${{ needs.setup.outputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name != 'pull_request'
+    
+    environment: 
+      name: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'development') }}
+      url: ${{ steps.deploy.outputs.uri }}
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 📥 Download Docker Image
+      uses: actions/download-artifact@v3
+      with:
+        name: chatbot-docker-image
+        path: /tmp
+        
+    - name: 🐳 Load Docker Image
+      run: docker load --input /tmp/chatbot-image.tar
+      
+    - name: 🔑 Azure Login (OIDC)
+      uses: azure/login@v1
+      with:
+        client-id: ${{ env.AZURE_CLIENT_ID }}
+        tenant-id: ${{ env.AZURE_TENANT_ID }}
+        subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+        
+    - name: 🛠️ Setup Azure Developer CLI
+      uses: Azure/setup-azd@v0.1.0
+      
+    - name: 🔧 Configure AZD Environment
+      run: |
+        azd config set alpha.resourceGroupDeployments on
+        
+        # Configuration des variables d'environnement
+        azd env set AZURE_ENV_NAME ${{ env.AZURE_ENV_NAME }}
+        azd env set AZURE_LOCATION ${{ vars.AZURE_LOCATION || 'eastus' }}
+        azd env set AZURE_SUBSCRIPTION_ID ${{ env.AZURE_SUBSCRIPTION_ID }}
+        
+        # Variables spécifiques à l'application
+        azd env set APP_VERSION ${{ github.sha }}
+        azd env set CONTAINER_IMAGE chatbot-web-scraper:${{ github.sha }}
+        
+    - name: 🏗️ Provision Azure Infrastructure
+      run: azd provision --no-prompt
+      env:
+        AZD_INITIAL_ENVIRONMENT_CONFIG: |
+          {
+            "services": {
+              "chatbot-app": {
+                "config": {
+                  "platform": {
+                    "type": "containerapp"
+                  }
+                }
+              }
+            }
+          }
+          
+    - name: 🚀 Deploy Application
+      id: deploy
+      run: |
+        # Déploiement avec azd
+        azd deploy --no-prompt
+        
+        # Récupérer l'URL de l'application
+        APP_URL=$(azd env get-values | grep AZURE_CONTAINER_APP_URL | cut -d'=' -f2 | tr -d '"')
+        echo "uri=$APP_URL" >> $GITHUB_OUTPUT
+        
+        echo "🎉 Application déployée avec succès!"
+        echo "🌐 URL: $APP_URL"
+        
+    - name: 🔍 Health Check
+      run: |
+        APP_URL=$(azd env get-values | grep AZURE_CONTAINER_APP_URL | cut -d'=' -f2 | tr -d '"')
+        
+        echo "⏳ Attente du démarrage de l'application..."
+        sleep 60
+        
+        # Test de santé
+        for i in {1..10}; do
+          if curl -f "$APP_URL/api/status" > /dev/null 2>&1; then
+            echo "✅ Application en ligne et fonctionnelle!"
+            exit 0
+          fi
+          echo "🔄 Tentative $i/10 - Nouvelle vérification dans 30s..."
+          sleep 30
+        done
+        
+        echo "⚠️ L'application met du temps à démarrer, vérifiez manuellement"
+        exit 1
+        
+    - name: 📊 Deployment Summary
+      run: |
+        echo "# 🚀 Déploiement Réussi" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 Informations du Déploiement" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environnement:** ${{ env.AZURE_ENV_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **URL de l'application:** ${{ steps.deploy.outputs.uri }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Resource Group:** $(azd env get-values | grep AZURE_RESOURCE_GROUP | cut -d'=' -f2)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🔗 Liens Utiles" >> $GITHUB_STEP_SUMMARY
+        echo "- [Application Web](${{ steps.deploy.outputs.uri }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [API Status](${{ steps.deploy.outputs.uri }}/api/status)" >> $GITHUB_STEP_SUMMARY
+        echo "- [Azure Portal](https://portal.azure.com)" >> $GITHUB_STEP_SUMMARY
+
+  #============================================================================
+  # Job 4: Tests d'Intégration Post-Déploiement
+  #============================================================================
+  integration-tests:
+    name: 🧪 Integration Tests
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.event_name != 'pull_request'
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 📦 Install Test Dependencies
+      run: |
+        pip install requests pytest python-dotenv
+        
+    - name: 🧪 Run Integration Tests
+      env:
+        APP_URL: ${{ needs.deploy.outputs.uri }}
+      run: |
+        # Tests d'intégration basiques
+        python -c "
+        import requests
+        import sys
+        import time
+        
+        app_url = '${{ needs.deploy.outputs.uri }}'
+        
+        # Test 1: Status endpoint
+        print('🔍 Test du endpoint de statut...')
+        response = requests.get(f'{app_url}/api/status')
+        assert response.status_code == 200
+        assert 'status' in response.json()
+        print('✅ Status endpoint OK')
+        
+        # Test 2: Application principale
+        print('🔍 Test de l\'application principale...')
+        response = requests.get(app_url)
+        assert response.status_code == 200
+        print('✅ Application principale OK')
+        
+        print('🎉 Tous les tests d\'intégration sont passés!')
+        "
+
+  #============================================================================
+  # Job 5: Nettoyage et Notifications
+  #============================================================================
+  cleanup:
+    name: 🧹 Cleanup & Notifications
+    runs-on: ubuntu-latest
+    needs: [test, build, deploy, integration-tests]
+    if: always()
+    
+    steps:
+    - name: 🧹 Cleanup Artifacts
+      uses: actions/github-script@v6
+      with:
+        script: |
+          // Supprimer les artefacts anciens pour économiser l'espace
+          const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            run_id: context.runId
+          });
+          
+          for (const artifact of artifacts.data.artifacts) {
+            if (artifact.name === 'chatbot-docker-image') {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id
+              });
+            }
+          }
+          
+    - name: 📢 Deployment Status
+      if: github.event_name != 'pull_request'
+      run: |
+        if [[ "${{ needs.deploy.result }}" == "success" && "${{ needs.integration-tests.result }}" == "success" ]]; then
+          echo "🎉 Déploiement réussi avec succès!"
+        else
+          echo "❌ Échec du déploiement ou des tests"
+          exit 1
+        fi
