@@ -27,6 +27,7 @@ on:
 # Variables globales
 env:
   AZURE_ENV_NAME: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+  AZURE_DEV_COLLECT_TELEMETRY: 'no'
 
 # Permissions spéciales pour OIDC
 permissions:
@@ -195,7 +196,22 @@ jobs:
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         
     - name: 🛠️ Setup Azure Developer CLI
-      uses: Azure/setup-azd@v1.0.0
+      run: |
+        # Installation directe d'AZD via script officiel
+        if curl -fsSL https://aka.ms/install-azd.sh | bash; then
+          echo "✅ AZD installé via script officiel"
+        else
+          echo "⚠️ Script officiel échoué, tentative d'installation via GitHub releases"
+          # Alternative : installation directe depuis GitHub releases
+          AZD_VERSION="1.10.2"
+          wget -q "https://github.com/Azure/azure-dev/releases/download/azure-dev-cli_${AZD_VERSION}/azd-linux-amd64.tar.gz" -O azd.tar.gz
+          tar -xzf azd.tar.gz
+          sudo mv azd /usr/local/bin/azd
+          chmod +x /usr/local/bin/azd
+        fi
+        
+        # Vérifier l'installation
+        azd version
       
     - name: 🔧 Configure AZD Environment
       run: |
