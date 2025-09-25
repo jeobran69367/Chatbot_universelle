@@ -209,7 +209,7 @@ resource chatbotApp 'Microsoft.App/containerApps@2023-05-01' = {
       activeRevisionsMode: 'Single'
       ingress: {
         external: true
-        targetPort: 8501
+        targetPort: 5001
         allowInsecure: false
         traffic: [
           {

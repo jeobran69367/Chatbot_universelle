@@ -111,7 +111,7 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5001/api/status || exit 1
 
 # Script d'entrée par défaut
-CMD ["python", "app.py"]
+CMD ["python", "main.py"]
 
 #==============================================================================
 # Stage 4: Version avec Ollama intégré (optionnel)
