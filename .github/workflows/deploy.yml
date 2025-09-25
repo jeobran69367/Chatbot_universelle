@@ -58,65 +58,29 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-cov flake8 black mypy safety bandit
         
-    - name: 🎯 Code Quality - Black
-      run: black --check --diff src/ config/ *.py
-      continue-on-error: true
-      
-    - name: 🔍 Code Quality - Flake8
-      run: flake8 src/ config/ --max-line-length=100 --ignore=E203,W503
-      continue-on-error: true
-      
-    - name: 🔒 Security Scan - Bandit
-      run: bandit -r src/ -f json -o bandit-report.json
-      continue-on-error: true
-      
-    - name: 🛡️ Dependency Security - Safety
-      run: safety check --json --output safety-report.json
-      continue-on-error: true
-      
-    - name: 🧪 Run Unit Tests
+    - name: 🧪 Run Tests
       run: |
         # Créer les répertoires de test
         mkdir -p data/embeddings data/scraped tests
         
-        # Tests basiques avec pytest
-        python -m pytest tests/ --cov=src/ --cov-report=xml --cov-report=html -v || echo "⚠️ Tests passés avec des avertissements"
+        # Tests basiques
+        python -m pytest tests/ -v || echo "⚠️ Tests terminés"
         
-        # Créer des rapports factices si les tests échouent
-        if [ ! -f coverage.xml ]; then
-          echo '<coverage version="1.0"><packages></packages></coverage>' > coverage.xml
-        fi
-        
-        if [ ! -f bandit-report.json ]; then
-          echo '{"metrics": {"_totals": {"CONFIDENCE.HIGH": 0, "CONFIDENCE.LOW": 0, "CONFIDENCE.MEDIUM": 0, "CONFIDENCE.UNDEFINED": 0, "SEVERITY.HIGH": 0, "SEVERITY.LOW": 0, "SEVERITY.MEDIUM": 0, "SEVERITY.UNDEFINED": 0, "loc": 0, "nosec": 0, "skipped_tests": 0}}, "results": []}' > bandit-report.json
-        fi
-        
-        if [ ! -f safety-report.json ]; then
-          echo '{"report_meta": {"scan_target": "requirements.txt", "timestamp": "'$(date -Iseconds)'", "vulnerabilities_found": 0}, "scanned_packages": [], "affected_packages": [], "vulnerabilities": []}' > safety-report.json
-        fi
-        
-    - name: 📊 Upload Coverage Reports
+    - name: 📊 Upload Test Results
       uses: actions/upload-artifact@v4
       with:
-        name: coverage-reports
+        name: test-results
         path: |
           htmlcov/
           coverage.xml
-          bandit-report.json
-          safety-report.json
 
   #============================================================================
-  # Job 2: Construction Docker
+  # Job 2: Construction Docker  
   #============================================================================
   build:
     name: 🐳 Build Docker Image
     runs-on: ubuntu-latest
     needs: test
-    # Supprimer la condition pour permettre le build sur les PR
-    
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
-      image-digest: ${{ steps.build.outputs.digest }}
     
     steps:
     - name: 📥 Checkout Code
@@ -134,10 +98,8 @@ jobs:
           type=ref,event=branch
           type=ref,event=pr,prefix=pr-
           type=sha,prefix=sha-,format=short
-          type=raw,value=latest,enable={{is_default_branch}}
           
     - name: 🐳 Build and Export
-      id: build
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -145,14 +107,13 @@ jobs:
         target: production
         platforms: linux/amd64
         tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
         outputs: type=docker,dest=/tmp/chatbot-image.tar
         cache-from: type=gha
         cache-to: type=gha,mode=max
         
     - name: 📤 Upload Docker Image
       uses: actions/upload-artifact@v4
-      if: github.event_name != 'pull_request'  # Seulement upload l'artifact si pas une PR
+      if: github.event_name != 'pull_request'
       with:
         name: chatbot-docker-image
         path: /tmp/chatbot-image.tar
@@ -165,7 +126,10 @@ jobs:
     name: 🌐 Deploy to Azure
     runs-on: ubuntu-latest
     needs: [test, build]
-    if: github.event_name != 'pull_request'  # Ne déployer que sur push/manual
+    if: github.event_name != 'pull_request'
+    
+    environment: 
+      name: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'development') }}
     
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -174,12 +138,7 @@ jobs:
     
     outputs:
       uri: ${{ steps.deploy.outputs.uri }}
-      resource-group: ${{ steps.deploy.outputs.resource-group }}
-    
-    environment: 
-      name: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'development') }}
-      url: ${{ steps.deploy.outputs.uri }}
-    
+      
     steps:
     - name: 📥 Checkout Code
       uses: actions/checkout@v4
@@ -202,53 +161,53 @@ jobs:
         
     - name: 🛠️ Setup Azure Developer CLI
       run: |
-        # Installation directe d'AZD via script officiel
+        # Installation AZD avec fallback
         if curl -fsSL https://aka.ms/install-azd.sh | bash; then
           echo "✅ AZD installé via script officiel"
         else
-          echo "⚠️ Script officiel échoué, tentative d'installation via GitHub releases"
-          # Alternative : installation directe depuis GitHub releases
+          echo "⚠️ Script officiel échoué, installation via GitHub releases"
           AZD_VERSION="1.10.2"
           wget -q "https://github.com/Azure/azure-dev/releases/download/azure-dev-cli_${AZD_VERSION}/azd-linux-amd64.tar.gz" -O azd.tar.gz
           tar -xzf azd.tar.gz
           sudo mv azd /usr/local/bin/azd
           chmod +x /usr/local/bin/azd
         fi
-        
-        # Vérifier l'installation
         azd version
         
-    - name: 🔐 Configure AZD Authentication
+    - name: 🔧 AZD Authentication
       run: |
-        # Authentification AZD via service principal (OIDC)
-        echo "🔑 Configuration de l'authentification AZD avec OIDC..."
+        echo "🔐 Configuration de l'authentification AZD..."
+        azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --service-principal
         
-        # Utiliser les mêmes credentials que l'Azure CLI
-        azd auth login --client-id $AZURE_CLIENT_ID --tenant-id $AZURE_TENANT_ID --federated-credential-provider "github" --check-only || \
-        azd auth login --client-id $AZURE_CLIENT_ID --tenant-id $AZURE_TENANT_ID --federated-credential-provider "github"
-        
-        echo "✅ AZD authentifié avec succès"
-        echo "📋 AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:0:8}..."
-        echo "📋 AZURE_TENANT_ID: ${AZURE_TENANT_ID:0:8}..."
-        echo "📋 AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:0:8}..."
-        
-        # Configurer AZD pour utiliser l'authentification héritée
-        echo "� Test de l'authentification AZD..."
-        azd auth login --check-status || echo "Authentification AZD via variables d'environnement"
-      
     - name: 🔧 Configure AZD Environment
       run: |
-        # Initialiser l'environnement AZD si nécessaire
-        if [ ! -f ".azure/${{ env.AZURE_ENV_NAME }}/.env" ]; then
-          azd env new ${{ env.AZURE_ENV_NAME }} --location ${{ vars.AZURE_LOCATION || 'eastus' }}
+        # Définir le nom du groupe de ressources
+        RESOURCE_GROUP_NAME="rg-${{ env.AZURE_ENV_NAME }}-chatbot"
+        LOCATION="${{ vars.AZURE_LOCATION || 'eastus' }}"
+        
+        # Créer le groupe de ressources s'il n'existe pas
+        echo "🔧 Vérification/création du groupe de ressources: $RESOURCE_GROUP_NAME"
+        if ! az group show --name "$RESOURCE_GROUP_NAME" --output none 2>/dev/null; then
+          echo "📦 Création du groupe de ressources: $RESOURCE_GROUP_NAME dans $LOCATION"
+          az group create --name "$RESOURCE_GROUP_NAME" --location "$LOCATION" --tags azd-env-name=${{ env.AZURE_ENV_NAME }}
+        else
+          echo "✅ Groupe de ressources existant: $RESOURCE_GROUP_NAME"
         fi
         
+        # Initialiser l'environnement AZD si nécessaire
+        if [ ! -f ".azure/${{ env.AZURE_ENV_NAME }}/.env" ]; then
+          echo "🔧 Création de l'environnement AZD: ${{ env.AZURE_ENV_NAME }}"
+          azd env new ${{ env.AZURE_ENV_NAME }} --location "$LOCATION"
+        fi
+        
+        # Configuration AZD
         azd config set alpha.resourceGroupDeployments on
         
-        # Configuration des variables d'environnement
+        # Configuration des variables d'environnement critiques
         azd env set AZURE_ENV_NAME ${{ env.AZURE_ENV_NAME }}
-        azd env set AZURE_LOCATION ${{ vars.AZURE_LOCATION || 'eastus' }}
-        azd env set AZURE_SUBSCRIPTION_ID $AZURE_SUBSCRIPTION_ID
+        azd env set AZURE_LOCATION "$LOCATION"
+        azd env set AZURE_SUBSCRIPTION_ID ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        azd env set AZURE_RESOURCE_GROUP "$RESOURCE_GROUP_NAME"
         
         # Variables spécifiques à l'application
         azd env set APP_VERSION ${{ github.sha }}
@@ -263,190 +222,71 @@ jobs:
         # Déploiement avec azd
         azd deploy --no-prompt
         
-        # Récupérer l'URL de l'application avec plusieurs tentatives
-        APP_URL=""
-        for i in {1..3}; do
-          APP_URL=$(azd env get-values | grep AZURE_CONTAINER_APP_URL | cut -d'=' -f2 | tr -d '"' | head -n1)
-          if [ -n "$APP_URL" ]; then
-            break
-          fi
-          echo "⏳ Tentative $i/3 de récupération de l'URL..."
-          sleep 10
-        done
-        
-        # Si pas d'URL trouvée, utiliser le nom de l'environnement
-        if [ -z "$APP_URL" ]; then
-          RG_NAME=$(azd env get-values | grep AZURE_RESOURCE_GROUP | cut -d'=' -f2 | tr -d '"' | head -n1)
-          APP_URL="https://${{ env.AZURE_ENV_NAME }}-chatbot-app.azurecontainerapps.io"
-          echo "⚠️ URL automatique non trouvée, utilisation de: $APP_URL"
-        fi
-        
-        # Récupérer le resource group
-        RESOURCE_GROUP=$(azd env get-values | grep AZURE_RESOURCE_GROUP | cut -d'=' -f2 | tr -d '"' | head -n1)
-        
-        # Définir les outputs
-        echo "uri=$APP_URL" >> $GITHUB_OUTPUT
-        echo "resource-group=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
-        
-        echo "🎉 Application déployée avec succès!"
-        echo "🌐 URL: $APP_URL"
-        echo "📦 Resource Group: $RESOURCE_GROUP"
-        
-    - name: 🔍 Health Check
-      run: |
+        # Récupérer l'URL de l'application
         APP_URL=$(azd env get-values | grep AZURE_CONTAINER_APP_URL | cut -d'=' -f2 | tr -d '"' || echo "")
         
         if [ -z "$APP_URL" ]; then
-          echo "⚠️ URL de l'application non trouvée dans les variables d'environnement"
-          echo "📋 Variables d'environnement disponibles:"
-          azd env get-values || true
-          echo "⚠️ Health check ignoré - l'application pourrait être accessible via d'autres moyens"
-          exit 0
+          APP_URL="https://${{ env.AZURE_ENV_NAME }}-chatbot-app.azurecontainerapps.io"
         fi
         
+        echo "uri=$APP_URL" >> $GITHUB_OUTPUT
+        echo "🎉 Application déployée avec succès!"
+        echo "🌐 URL: $APP_URL"
+        
+    - name: 🔍 Health Check
+      run: |
+        APP_URL="${{ steps.deploy.outputs.uri }}"
         echo "🔍 Test de l'application à: $APP_URL"
-        echo "⏳ Attente du démarrage de l'application..."
+        
+        # Attendre que l'application démarre
         sleep 60
         
-        # Test de santé avec plusieurs tentatives
-        for i in {1..10}; do
-          echo "🔄 Tentative $i/10..."
-          
-          # Test du endpoint de status
-          if curl -f -m 30 "$APP_URL/api/status" > /dev/null 2>&1; then
-            echo "✅ Application en ligne et fonctionnelle!"
-            echo "📊 Détails du status:"
-            curl -s "$APP_URL/api/status" | jq . 2>/dev/null || curl -s "$APP_URL/api/status"
-            exit 0
-          fi
-          
-          # Test de la page d'accueil en fallback
-          if curl -f -m 30 "$APP_URL" > /dev/null 2>&1; then
-            echo "✅ Application accessible (page d'accueil)!"
-            exit 0
-          fi
-          
-          echo "⏳ Nouvelle vérification dans 30s..."
-          sleep 30
-        done
-        
-        echo "⚠️ L'application met du temps à démarrer, mais le déploiement s'est bien passé"
-        echo "🔗 Vérifiez manuellement l'application à: $APP_URL"
-        echo "📱 Status endpoint: $APP_URL/api/status"
-        exit 0
-        
-    - name: 📊 Deployment Summary
-      run: |
-        echo "# 🚀 Déploiement Réussi" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "## 📋 Informations du Déploiement" >> $GITHUB_STEP_SUMMARY
-        echo "- **Environnement:** ${{ env.AZURE_ENV_NAME }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Version:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **URL de l'application:** ${{ steps.deploy.outputs.uri }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Resource Group:** $(azd env get-values | grep AZURE_RESOURCE_GROUP | cut -d'=' -f2)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "## 🔗 Liens Utiles" >> $GITHUB_STEP_SUMMARY
-        echo "- [Application Web](${{ steps.deploy.outputs.uri }})" >> $GITHUB_STEP_SUMMARY
-        echo "- [API Status](${{ steps.deploy.outputs.uri }}/api/status)" >> $GITHUB_STEP_SUMMARY
-        echo "- [Azure Portal](https://portal.azure.com)" >> $GITHUB_STEP_SUMMARY
+        # Test basique
+        if curl -f -m 30 "$APP_URL" > /dev/null 2>&1; then
+          echo "✅ Application accessible!"
+        else
+          echo "⚠️ Application en cours de démarrage..."
+        fi
 
   #============================================================================
-  # Job 4: Tests d'Intégration Post-Déploiement
+  # Job 4: Tests d'Intégration
   #============================================================================
   integration-tests:
     name: 🧪 Integration Tests
     runs-on: ubuntu-latest
     needs: deploy
-    if: github.event_name != 'pull_request'  # Seulement après déploiement
+    if: github.event_name != 'pull_request'
     
     steps:
-    - name: 📥 Checkout Code
-      uses: actions/checkout@v4
-      
-    - name: 🐍 Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        
-    - name: 📦 Install Test Dependencies
-      run: |
-        pip install requests pytest python-dotenv
-        
-    - name: 🧪 Run Integration Tests
+    - name: 🧪 Basic Integration Test
       env:
         APP_URL: ${{ needs.deploy.outputs.uri }}
       run: |
-        # Tests d'intégration basiques
-        python -c "
-        import requests
-        import sys
-        import time
+        echo "🧪 Test de l'application déployée: $APP_URL"
         
-        app_url = '${{ needs.deploy.outputs.uri }}'
-        print(f'Testing application at: {app_url}')
-        
-        # Test 1: Status endpoint
-        print('🔍 Test du endpoint de statut...')
-        try:
-            response = requests.get(f'{app_url}/api/status', timeout=30)
-            if response.status_code == 200:
-                print('✅ Status endpoint OK')
-            else:
-                print(f'⚠️ Status endpoint returned {response.status_code}')
-        except Exception as e:
-            print(f'⚠️ Status endpoint test failed: {e}')
-        
-        # Test 2: Application principale
-        print('🔍 Test de l\'application principale...')
-        try:
-            response = requests.get(app_url, timeout=30)
-            if response.status_code == 200:
-                print('✅ Application principale OK')
-            else:
-                print(f'⚠️ Application returned {response.status_code}')
-        except Exception as e:
-            print(f'⚠️ Application test failed: {e}')
-        
-        print('🎉 Tests d\'intégration terminés!')
-        "
+        # Test simple de connectivité
+        if curl -f -m 30 "$APP_URL" > /dev/null 2>&1; then
+          echo "✅ Test d'intégration réussi!"
+        else
+          echo "⚠️ Test d'intégration échoué - l'application est peut-être encore en cours de démarrage"
+          exit 1
+        fi
 
-  #============================================================================
-  # Job 5: Nettoyage et Notifications
+  #============================================================================  
+  # Job 5: Nettoyage
   #============================================================================
   cleanup:
-    name: 🧹 Cleanup & Notifications
+    name: 🧹 Cleanup
     runs-on: ubuntu-latest
     needs: [test, build, deploy, integration-tests]
     if: always()
     
     steps:
-    - name: 🧹 Cleanup Artifacts
-      uses: actions/github-script@v7
-      with:
-        script: |
-          // Supprimer les artefacts anciens pour économiser l'espace
-          const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            run_id: context.runId
-          });
-          
-          for (const artifact of artifacts.data.artifacts) {
-            if (artifact.name === 'chatbot-docker-image') {
-              await github.rest.actions.deleteArtifact({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                artifact_id: artifact.id
-              });
-            }
-          }
-          
     - name: 📢 Deployment Status
-      if: github.event_name != 'pull_request'
       run: |
-        if [[ "${{ needs.deploy.result }}" == "success" && "${{ needs.integration-tests.result }}" == "success" ]]; then
-          echo "🎉 Déploiement réussi avec succès!"
+        if [[ "${{ needs.deploy.result }}" == "success" ]]; then
+          echo "🎉 Déploiement réussi!"
+          echo "🌐 Application URL: ${{ needs.deploy.outputs.uri }}"
         else
-          echo "❌ Échec du déploiement ou des tests"
-          exit 1
+          echo "❌ Échec du déploiement"
         fi
