@@ -1,20 +1,22 @@
 # 🤖 Chatbot Web Scraper Intelligent
 
-Un chatbot intelligent capable de scraper des sites web, vectoriser le contenu et répondre aux questions en utilisant OpenAI et des techniques de RAG (Retrieval Augmented Generation).
+Un chatbot intelligent capable de scraper des sites web, vectoriser le contenu et répondre aux questions en utilisant **Ollama** (LLaMA, Mistral, etc.) et des techniques de RAG (Retrieval Augmented Generation) - **100% local et privé**.
 
 ## ✨ Fonctionnalités
 
 - 🕷️ **Web Scraping Avancé**: Scrape automatiquement un site web et toutes ses pages liées
-- 🧠 **Intelligence Artificielle**: Utilise OpenAI GPT pour générer des réponses contextuelles
+- 🧠 **Intelligence Artificielle Locale**: Utilise Ollama avec LLaMA 3.1, Mistral ou d'autres modèles open-source
 - 📊 **Base de Données Vectorielle**: Stocke et recherche efficacement dans le contenu scrapé
 - 🎨 **Interface Intuitive**: Interface web moderne avec Streamlit
 - 🔍 **Recherche Sémantique**: Trouve le contenu pertinent pour chaque question
 - 💬 **Conversation Contextuelle**: Maintient l'historique des conversations
+- 🔒 **100% Privé**: Toutes les données restent en local, aucune API externe requise
+- 🎭 **Prompts Personnalisables**: Styles de réponse adaptables (défaut, expert, casual)
 
 ## 🛠️ Technologies Utilisées
 
 - **Frontend**: Streamlit
-- **AI/ML**: OpenAI GPT, Sentence Transformers
+- **AI/ML**: Ollama (LLaMA, Mistral, etc.), Sentence Transformers
 - **Web Scraping**: BeautifulSoup, Selenium, Requests
 - **Base de Données Vectorielle**: ChromaDB ou FAISS
 - **Traitement de Texte**: NLTK, spaCy, LangChain
@@ -30,10 +32,10 @@ cd Model
 
 ### 2. Créer un environnement virtuel
 ```bash
-python -m venv venv
-source venv/bin/activate  # Sur macOS/Linux
+python -m venv .venv
+source .venv/bin/activate  # Sur macOS/Linux
 # ou
-venv\Scripts\activate  # Sur Windows
+.venv\Scripts\activate  # Sur Windows
 ```
 
 ### 3. Installer les dépendances
@@ -41,20 +43,81 @@ venv\Scripts\activate  # Sur Windows
 pip install -r requirements.txt
 ```
 
-### 4. Configuration des variables d'environnement
-Copiez le fichier `.env` et ajustez les valeurs :
+### 4. Installer et configurer Ollama
+
+**Sur macOS:**
+```bash
+# Installer Ollama
+brew install ollama
+
+# Ou télécharger depuis https://ollama.ai/download
+curl -fsSL https://ollama.ai/install.sh | sh
+```
+
+**Sur Linux:**
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+```
+
+**Sur Windows:**
+- Téléchargez l'installateur depuis [https://ollama.ai/download](https://ollama.ai/download)
+- Exécutez l'installateur et suivez les instructions
+
+### 5. Démarrer Ollama et télécharger un modèle
+```bash
+# Démarrer le service Ollama (si pas auto-démarré)
+ollama serve
+
+# Dans un nouveau terminal, télécharger le modèle LLaMA 3.1
+ollama pull llama3.1:latest
+
+# Optionnel: Télécharger des modèles plus légers
+ollama pull qwen2:0.5b    # Modèle très léger (500MB)
+ollama pull mistral:7b    # Modèle Mistral (4.1GB)
+
+# Vérifier les modèles installés
+ollama list
+```
+
+### 6. Configuration des variables d'environnement
+Créez un fichier `.env` à la racine du projet :
 ```bash
 cp .env.example .env
 ```
 
-Modifiez le fichier `.env` avec vos clés API :
+Modifiez le fichier `.env` avec vos configurations :
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
+# Configuration Ollama
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=llama3.1:latest
+
+# Configuration Streamlit (optionnel)
+STREAMLIT_THEME_BASE=light
+STREAMLIT_THEME_PRIMARY_COLOR=#FF6B6B
+STREAMLIT_THEME_BACKGROUND_COLOR=#FFFFFF
 ```
 
-### 5. Lancer l'application
+### 7. Lancer l'application
+
+**Option 1 : Avec l'environnement virtuel activé**
 ```bash
+source .venv/bin/activate  # Sur macOS/Linux
+# ou
+.venv\Scripts\activate  # Sur Windows
 streamlit run app.py
+```
+
+**Option 2 : Directement avec le chemin complet**
+```bash
+./.venv/bin/streamlit run app.py  # Sur macOS/Linux
+# ou
+.venv\Scripts\streamlit run app.py  # Sur Windows
+```
+
+**Option 3 : Script de démarrage automatique**
+```bash
+chmod +x start_chatbot.sh
+./start_chatbot.sh
 ```
 
 ## 🚀 Utilisation
@@ -108,12 +171,15 @@ Model/
 ├── requirements.txt       # Dépendances Python
 ├── .env                  # Variables d'environnement
 ├── README.md             # Documentation
+├── start_chatbot.sh      # Script de démarrage automatique
 ├── config/
-│   └── settings.py       # Configuration de l'application
+│   ├── settings.py       # Configuration de l'application
+│   └── prompts.py        # Configuration des prompts système
 ├── src/
 │   ├── web_scraper.py    # Module de scraping web
 │   ├── vector_database.py # Base de données vectorielle
-│   └── chatbot.py        # Intégration OpenAI
+│   ├── chatbot.py        # Intégration Ollama
+│   └── robust_vector_db.py # Solution robuste ChromaDB
 └── data/                 # Données scrapées et modèles
     ├── scraped/          # Données JSON brutes
     ├── embeddings/       # Base de données vectorielle
@@ -141,12 +207,20 @@ CHUNK_OVERLAP = 200         # Chevauchement entre chunks
 SIMILARITY_THRESHOLD = 0.7  # Seuil de similarité
 ```
 
-### Modèles OpenAI
+### Modèles Ollama
 
 ```python
-OPENAI_MODEL = "gpt-3.5-turbo"  # ou "gpt-4"
-EMBEDDING_MODEL = "text-embedding-ada-002"
+# Configuration dans .env ou directement
+OLLAMA_MODEL = "llama3.1:latest"  # Modèle par défaut
+OLLAMA_MODEL = "mistral:7b"       # Modèle Mistral
+OLLAMA_MODEL = "qwen2:0.5b"       # Modèle léger pour tests
 ```
+
+**Modèles recommandés :**
+- `llama3.1:latest` - Excellent équilibre performance/qualité (4.6GB)
+- `mistral:7b` - Très bon pour le français (4.1GB)
+- `qwen2:0.5b` - Ultra-léger pour développement (500MB)
+- `codellama:latest` - Spécialisé en programmation (3.8GB)
 
 ## 🔧 Personnalisation
 
@@ -161,11 +235,22 @@ def scrape_api_data(api_url):
 
 ### Modifier le Prompt Système
 
+**Option 1: Via l'interface Streamlit**
+- Utilisez le sélecteur "Style de réponse" dans la sidebar
+- Styles disponibles: `default`, `expert`, `casual`
+
+**Option 2: Par programmation**
 ```python
 # Dans chatbot.py
-chatbot = ChatBot()
-chatbot.set_system_prompt("Votre nouveau prompt système...")
+chatbot = ChatBot(prompt_style="expert")  # Style au démarrage
+
+# Ou changer dynamiquement
+chatbot.set_system_prompt(style="casual")
+chatbot.set_system_prompt("Votre prompt personnalisé...")
 ```
+
+**Option 3: Personnalisation avancée**
+Modifiez le fichier `config/prompts.py` pour ajouter vos propres styles de prompts.
 
 ### Changer de Base de Données Vectorielle
 
@@ -178,9 +263,31 @@ vector_db = VectorDatabase("faiss")
 
 ### Erreurs Communes
 
-1. **Erreur d'API OpenAI** : Vérifiez votre clé API dans le fichier `.env`
-2. **Erreur de Selenium** : Installez ChromeDriver ou utilisez `use_selenium=False`
-3. **Problèmes de mémoire** : Réduisez `MAX_PAGES_PER_SITE` ou `CHUNK_SIZE`
+1. **Erreur de connexion Ollama** : 
+   - Vérifiez qu'Ollama est démarré : `ollama serve`
+   - Vérifiez le modèle : `ollama list`
+   - Redémarrez Ollama si nécessaire
+
+2. **Modèle non trouvé** :
+   ```bash
+   ollama pull llama3.1:latest
+   ```
+
+3. **Erreur de Selenium** : 
+   - Installez ChromeDriver ou utilisez `use_selenium=False`
+   - Sur macOS : `brew install chromedriver`
+
+4. **Problèmes de mémoire** : 
+   - Réduisez `MAX_PAGES_PER_SITE` ou `CHUNK_SIZE`
+   - Utilisez un modèle plus léger comme `qwen2:0.5b`
+
+5. **Port 11434 occupé** :
+   ```bash
+   # Arrêter Ollama
+   killall ollama
+   # Redémarrer
+   ollama serve
+   ```
 
 ### Logs de Debug
 
@@ -203,8 +310,9 @@ logging.basicConfig(level=logging.DEBUG)
 ### Limites Actuelles
 
 - Maximum 100 pages par site (configurable)
-- Token limit OpenAI (4K pour GPT-3.5-turbo)
+- Limite de contexte Ollama (variable selon le modèle)
 - Pas de mise à jour automatique du contenu
+- Nécessite Ollama en local (peut être déployé en remote)
 
 ## 🤝 Contribution
 
@@ -220,9 +328,11 @@ Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 
 ## 🙏 Remerciements
 
-- OpenAI pour les modèles GPT et les embeddings
-- L'équipe Streamlit pour l'interface utilisateur
-- La communauté ChromaDB pour la base de données vectorielle
+- **Ollama** pour l'infrastructure d'IA locale
+- **Meta AI** pour les modèles LLaMA
+- **Mistral AI** pour les modèles Mistral
+- L'équipe **Streamlit** pour l'interface utilisateur
+- La communauté **ChromaDB** pour la base de données vectorielle
 - Tous les contributeurs des librairies open-source utilisées
 
 ## 📞 Support

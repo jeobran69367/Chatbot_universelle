@@ -14,9 +14,9 @@ for dir_path in [DATA_DIR, MODELS_DIR, EMBEDDINGS_DIR, SCRAPED_DATA_DIR]:
     dir_path.mkdir(exist_ok=True)
 
 # API Configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = "gpt-3.5-turbo"  # or "gpt-4"
-EMBEDDING_MODEL = "text-embedding-ada-002"
+OLLAMA_HOST = "http://localhost:11434"
+OLLAMA_MODEL = "llama3.1"  # ou "mistral", "codellama", etc.
+EMBEDDING_MODEL = "all-minilm"  # Modèle d'embedding local
 
 # Scraping Configuration
 MAX_PAGES_PER_SITE = 100  # Limit to prevent infinite crawling

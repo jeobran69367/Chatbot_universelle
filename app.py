@@ -279,6 +279,25 @@ def display_sidebar():
     with st.sidebar:
         st.header("🛠️ Configuration")
         
+        # Chatbot Configuration
+        st.subheader("🤖 Configuration du Chatbot")
+        
+        # Prompt style selector
+        if st.session_state.chatbot:
+            available_styles = st.session_state.chatbot.list_available_prompt_styles()
+            current_style = st.selectbox(
+                "Style de réponse:",
+                options=available_styles,
+                help="Choisissez le style de réponse du chatbot"
+            )
+            
+            if st.button("Appliquer le style"):
+                st.session_state.chatbot.set_system_prompt(style=current_style)
+                st.success(f"Style '{current_style}' appliqué!")
+                st.rerun()
+        
+        st.divider()
+        
         # Web Scraping Section
         st.subheader("📡 Scraping Web")
         

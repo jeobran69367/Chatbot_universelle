@@ -42,13 +42,18 @@ except ImportError:
 # Import config with fallback
 try:
     from config.settings import (
-        EMBEDDINGS_DIR, OPENAI_API_KEY, EMBEDDING_MODEL, 
-        CHUNK_SIZE, CHUNK_OVERLAP, VECTOR_DB_TYPE
+        EMBEDDINGS_DIR, CHUNK_SIZE, CHUNK_OVERLAP, VECTOR_DB_TYPE
     )
+    EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Modèle par défaut disponible
 except ImportError:
     # Fallback values if config import fails
     from pathlib import Path
     import os
+    EMBEDDINGS_DIR = Path.cwd() / "data" / "embeddings"
+    EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+    CHUNK_SIZE = 1000
+    CHUNK_OVERLAP = 200
+    VECTOR_DB_TYPE = "chromadb"
     EMBEDDINGS_DIR = Path(__file__).parent.parent / "data" / "embeddings"
     EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -205,8 +210,20 @@ class ChromaVectorDB:
             raise ImportError("ChromaDB not available. Install with: pip install chromadb")
         
         self.collection_name = collection_name
-        self.client = chromadb.PersistentClient(path=str(EMBEDDINGS_DIR / "chroma_db"))
-        self.collection = self.client.get_or_create_collection(name=collection_name)
+        try:
+            # Créer le client avec l'embedding par défaut
+            self.client = chromadb.PersistentClient(path=str(EMBEDDINGS_DIR / "chroma_db"))
+            
+            # Utiliser l'embedding par défaut de ChromaDB (all-MiniLM-L6-v2)
+            self.collection = self.client.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"}  # Utiliser la distance cosinus
+            )
+        except Exception as e:
+            # Si ça échoue, essayer sans métadonnées
+            self.client = chromadb.PersistentClient(path=str(EMBEDDINGS_DIR / "chroma_db"))
+            self.collection = self.client.get_or_create_collection(name=collection_name)
+        
         self.logger = logging.getLogger(__name__)
     
     def add_documents(self, chunks: List[DocumentChunk]):
@@ -223,25 +240,19 @@ class ChromaVectorDB:
             'created_at': chunk.created_at.isoformat() if chunk.created_at else None
         } for chunk in chunks]
         
-        # Generate embeddings if not present
-        embeddings = []
-        for chunk in chunks:
-            if chunk.embedding is not None:
-                embeddings.append(chunk.embedding.tolist())
-            else:
-                # This should not happen if embeddings are generated properly
-                embeddings.append([0.0] * 384)  # Default dimension
-        
         try:
+            # ChromaDB génère automatiquement les embeddings
             self.collection.add(
                 ids=ids,
                 documents=documents,
-                metadatas=metadatas,
-                embeddings=embeddings
+                metadatas=metadatas
             )
+            
             self.logger.info(f"Added {len(chunks)} documents to ChromaDB")
+            
         except Exception as e:
             self.logger.error(f"Error adding documents to ChromaDB: {e}")
+            raise
     
     def search(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """
@@ -381,7 +392,7 @@ class VectorDatabase:
         Initialize vector database.
         
         Args:
-            db_type: Type of vector database ('chroma' or 'faiss')
+            db_type: Type of vector database ('chroma', 'chromadb' or 'faiss')
         """
         self.db_type = db_type
         self.chunker = TextChunker()
@@ -389,7 +400,7 @@ class VectorDatabase:
         self.logger = logging.getLogger(__name__)
         
         # Initialize vector database
-        if db_type == "chroma":
+        if db_type in ["chroma", "chromadb"]:
             self.db = ChromaVectorDB()
         elif db_type == "faiss":
             self.db = FAISSVectorDB()

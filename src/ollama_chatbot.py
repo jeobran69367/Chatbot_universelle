@@ -1,6 +1,6 @@
 """
 Chatbot intégrant Ollama pour des réponses intelligentes locales.
-Ce module combine la recherche vectorielle et l'IA générative locale.
+Cette version remplace OpenAI par Ollama pour une solution entièrement locale.
 """
 
 import logging
@@ -9,69 +9,66 @@ import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-# Imports Ollama
 try:
     import ollama
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
 
-# Import config with fallback
-try:
-    from config.settings import OLLAMA_HOST, OLLAMA_MODEL
-    from config.prompts import DEFAULT_SYSTEM_PROMPT, AVAILABLE_PROMPTS
-except ImportError:
-    # Fallback values if config import fails
-    import os
-    OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:latest")
-    DEFAULT_SYSTEM_PROMPT = """
-    Vous êtes un assistant IA intelligent et serviable qui aide les utilisateurs en répondant à leurs questions 
-    en utilisant les informations provenant de sites web qui ont été analysés et indexés.
-    
-    Instructions importantes:
-    1. Utilisez principalement les informations fournies dans le contexte pour répondre aux questions
-    2. Si l'information n'est pas disponible dans le contexte, indiquez-le clairement
-    3. Soyez précis et informatif dans vos réponses
-    4. Citez la source (URL) quand c'est pertinent
-    5. Répondez en français de manière naturelle et conversationnelle
-    6. Si vous n'êtes pas sûr d'une information, dites-le explicitement
-    
-    Contexte des documents analysés:
-    {context}
-    
-    Conversation précédente:
-    {conversation_history}
-    """
-    AVAILABLE_PROMPTS = {"default": DEFAULT_SYSTEM_PROMPT}
+import os
+import sys
+from pathlib import Path
 
-class ChatBot:
+# Ajouter le répertoire parent au chemin pour les imports
+current_dir = Path(__file__).parent
+parent_dir = current_dir.parent
+sys.path.append(str(parent_dir))
+
+from config.settings import OLLAMA_HOST, OLLAMA_MODEL
+
+class OllamaChatBot:
     """
-    Intelligent chatbot using Ollama with RAG (Retrieval Augmented Generation).
+    Chatbot intelligent utilisant Ollama avec RAG (Retrieval Augmented Generation).
     """
     
-    def __init__(self, model: str = OLLAMA_MODEL, host: str = OLLAMA_HOST, prompt_style: str = "default"):
+    def __init__(self, model: str = OLLAMA_MODEL, host: str = OLLAMA_HOST):
         """
-        Initialize the chatbot.
+        Initialise le chatbot Ollama.
         
         Args:
-            model: Ollama model to use (e.g., 'llama3.1', 'mistral', 'codellama')
-            host: Ollama server host address
-            prompt_style: Style of system prompt ('default', 'expert', 'casual')
+            model: Modèle Ollama à utiliser (ex: 'llama3.1', 'mistral', 'codellama')
+            host: Adresse du serveur Ollama
         """
         self.model = model
         self.host = host
         self.conversation_history: List[Dict[str, str]] = []
         self.logger = logging.getLogger(__name__)
         
-        # Verify Ollama availability
+        # Vérifier si Ollama est disponible
         self._check_ollama_availability()
         
-        # Set system prompt based on style
-        self.system_prompt = AVAILABLE_PROMPTS.get(prompt_style, DEFAULT_SYSTEM_PROMPT)
+        # System prompt pour le chatbot
+        self.system_prompt = """
+        Vous êtes un assistant IA intelligent et serviable qui aide les utilisateurs en répondant à leurs questions 
+        en utilisant les informations provenant de sites web qui ont été analysés et indexés.
+        
+        Instructions importantes:
+        1. Utilisez principalement les informations fournies dans le contexte pour répondre aux questions
+        2. Si l'information n'est pas disponible dans le contexte, indiquez-le clairement
+        3. Soyez précis et informatif dans vos réponses
+        4. Citez la source (URL) quand c'est pertinent
+        5. Répondez en français de manière naturelle et conversationnelle
+        6. Si vous n'êtes pas sûr d'une information, dites-le explicitement
+        
+        Contexte des documents analysés:
+        {context}
+        
+        Conversation précédente:
+        {conversation_history}
+        """
     
     def _check_ollama_availability(self):
-        """Check if Ollama is available and running."""
+        """Vérifie si Ollama est disponible."""
         try:
             response = requests.get(f"{self.host}/api/tags", timeout=5)
             if response.status_code == 200:
@@ -79,38 +76,33 @@ class ChatBot:
                 available_models = [model["name"] for model in models]
                 
                 if self.model not in available_models:
-                    self.logger.warning(f"Model {self.model} not found. Available models: {available_models}")
+                    self.logger.warning(f"Modèle {self.model} non trouvé. Modèles disponibles: {available_models}")
                     if available_models:
                         self.model = available_models[0]
-                        self.logger.info(f"Using model: {self.model}")
+                        self.logger.info(f"Utilisation du modèle: {self.model}")
                 
-                self.logger.info(f"Ollama available with model: {self.model}")
+                self.logger.info(f"Ollama disponible avec le modèle: {self.model}")
             else:
-                raise Exception("Ollama server not accessible")
+                raise Exception("Serveur Ollama non accessible")
                 
         except Exception as e:
-            error_msg = f"Error connecting to Ollama: {e}"
+            error_msg = f"Erreur de connexion à Ollama: {e}"
             self.logger.error(error_msg)
-            raise Exception(f"Make sure Ollama is installed and running: {error_msg}")
+            raise Exception(f"Assurez-vous qu'Ollama est installé et lancé: {error_msg}")
     
-    def _call_ollama_api(self, prompt: str, max_tokens: int = 1000) -> str:
-        """Call Ollama API to generate a response."""
+    def _call_ollama_api(self, prompt: str) -> str:
+        """Appelle l'API Ollama pour générer une réponse."""
         try:
             if OLLAMA_AVAILABLE:
-                # Use ollama library if available
+                # Utiliser la bibliothèque ollama si disponible
                 response = ollama.chat(
                     model=self.model,
                     messages=[{'role': 'user', 'content': prompt}],
-                    stream=False,
-                    options={
-                        'num_predict': max_tokens,
-                        'temperature': 0.7,
-                        'top_p': 0.9
-                    }
+                    stream=False
                 )
                 return response['message']['content']
             else:
-                # Use REST API directly
+                # Utiliser l'API REST directement
                 payload = {
                     "model": self.model,
                     "prompt": prompt,
@@ -118,7 +110,7 @@ class ChatBot:
                     "options": {
                         "temperature": 0.7,
                         "top_p": 0.9,
-                        "num_predict": max_tokens
+                        "num_predict": 1000
                     }
                 }
                 
@@ -131,21 +123,21 @@ class ChatBot:
                 if response.status_code == 200:
                     return response.json()["response"]
                 else:
-                    raise Exception(f"Ollama API error: {response.status_code} - {response.text}")
+                    raise Exception(f"Erreur API Ollama: {response.status_code} - {response.text}")
                     
         except Exception as e:
-            self.logger.error(f"Error calling Ollama: {e}")
+            self.logger.error(f"Erreur lors de l'appel à Ollama: {e}")
             raise
     
     def format_context_from_search_results(self, search_results: List[Dict[str, Any]]) -> str:
         """
-        Format search results into context for the prompt.
+        Formate les résultats de recherche en contexte pour le prompt.
         
         Args:
-            search_results: List of search results from vector database
+            search_results: Liste des résultats de recherche de la base vectorielle
             
         Returns:
-            Formatted context string
+            Chaîne de contexte formatée
         """
         if not search_results:
             return "Aucun contexte pertinent trouvé dans les documents analysés."
@@ -170,17 +162,17 @@ Contenu: {content}
     
     def format_conversation_history(self) -> str:
         """
-        Format conversation history for the prompt.
+        Formate l'historique de conversation pour le prompt.
         
         Returns:
-            Formatted conversation history
+            Historique de conversation formaté
         """
         if not self.conversation_history:
             return "Aucune conversation précédente."
         
         history_parts = []
-        # Keep only last few exchanges to avoid token limits
-        recent_history = self.conversation_history[-6:]  # Last 3 exchanges (user + assistant)
+        # Garder seulement les derniers échanges pour éviter les limites
+        recent_history = self.conversation_history[-6:]  # 3 derniers échanges
         
         for message in recent_history:
             role = message['role']
@@ -192,57 +184,54 @@ Contenu: {content}
         
         return '\n'.join(history_parts)
     
-    
     def generate_response(self, 
                          user_question: str, 
-                         search_results: List[Dict[str, Any]] = None,
-                         max_tokens: int = 1000) -> Dict[str, Any]:
+                         search_results: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Generate a response using Ollama with RAG.
+        Génère une réponse utilisant Ollama avec RAG.
         
         Args:
-            user_question: User's question
-            search_results: Relevant search results from vector database
-            max_tokens: Maximum number of tokens for the response
+            user_question: Question de l'utilisateur
+            search_results: Résultats de recherche pertinents de la base vectorielle
             
         Returns:
-            Dictionary containing response and metadata
+            Dictionnaire contenant la réponse et les métadonnées
         """
         try:
-            # Format context from search results
+            # Formater le contexte à partir des résultats de recherche
             context = ""
             if search_results:
                 context = self.format_context_from_search_results(search_results)
             else:
                 context = "Aucun contexte spécifique fourni."
             
-            # Format conversation history
+            # Formater l'historique de conversation
             conversation_history = self.format_conversation_history()
             
-            # Create the prompt with context
+            # Créer le prompt avec le contexte
             full_prompt = self.system_prompt.format(
                 context=context,
                 conversation_history=conversation_history
             )
             
-            # Add user question
+            # Ajouter la question de l'utilisateur
             full_prompt += f"\n\nQuestion de l'utilisateur: {user_question}\n\nRéponse:"
             
-            # Log the request
-            self.logger.info(f"Generating response for: {user_question[:100]}...")
+            # Enregistrer la requête
+            self.logger.info(f"Génération de réponse pour: {user_question[:100]}...")
             
-            # Make the API call to Ollama
-            assistant_response = self._call_ollama_api(full_prompt, max_tokens)
+            # Faire l'appel à Ollama
+            assistant_response = self._call_ollama_api(full_prompt)
             
-            # Update conversation history
+            # Mettre à jour l'historique de conversation
             self.conversation_history.append({"role": "user", "content": user_question})
             self.conversation_history.append({"role": "assistant", "content": assistant_response})
             
-            # Keep conversation history manageable
+            # Garder l'historique gérable
             if len(self.conversation_history) > 20:
                 self.conversation_history = self.conversation_history[-20:]
             
-            # Prepare response data
+            # Préparer les données de réponse
             response_data = {
                 "response": assistant_response,
                 "model": self.model,
@@ -251,7 +240,7 @@ Contenu: {content}
                 "host": self.host
             }
             
-            self.logger.info("Response generated successfully")
+            self.logger.info("Réponse générée avec succès")
             
             return response_data
             
@@ -267,46 +256,35 @@ Contenu: {content}
             }
     
     def clear_conversation_history(self):
-        """Clear the conversation history."""
+        """Efface l'historique de conversation."""
         self.conversation_history.clear()
-        self.logger.info("Conversation history cleared")
+        self.logger.info("Historique de conversation effacé")
     
     def get_conversation_history(self) -> List[Dict[str, str]]:
         """
-        Get the current conversation history.
+        Récupère l'historique de conversation actuel.
         
         Returns:
-            List of conversation messages
+            Liste des messages de conversation
         """
         return self.conversation_history.copy()
     
-    def set_system_prompt(self, new_prompt: str = None, style: str = None):
+    def set_system_prompt(self, new_prompt: str):
         """
-        Update the system prompt.
+        Met à jour le prompt système.
         
         Args:
-            new_prompt: New system prompt (custom text)
-            style: Predefined style ('default', 'expert', 'casual')
+            new_prompt: Nouveau prompt système
         """
-        if new_prompt:
-            self.system_prompt = new_prompt
-            self.logger.info("System prompt updated with custom text")
-        elif style and style in AVAILABLE_PROMPTS:
-            self.system_prompt = AVAILABLE_PROMPTS[style]
-            self.logger.info(f"System prompt updated to style: {style}")
-        else:
-            self.logger.warning(f"Invalid style: {style}. Available styles: {list(AVAILABLE_PROMPTS.keys())}")
-    
-    def list_available_prompt_styles(self) -> List[str]:
-        """List available prompt styles."""
-        return list(AVAILABLE_PROMPTS.keys())
+        self.system_prompt = new_prompt
+        self.logger.info("Prompt système mis à jour")
     
     def get_model_info(self) -> Dict[str, Any]:
         """
-        Get information about the current model configuration.
+        Récupère des informations sur la configuration actuelle du modèle.
         
         Returns:
-            Dictionary with model information
+            Dictionnaire avec les informations du modèle
         """
         return {
             "model": self.model,
@@ -316,7 +294,7 @@ Contenu: {content}
         }
     
     def list_available_models(self) -> List[str]:
-        """List available Ollama models."""
+        """Liste les modèles Ollama disponibles."""
         try:
             response = requests.get(f"{self.host}/api/tags", timeout=5)
             if response.status_code == 200:
@@ -325,29 +303,29 @@ Contenu: {content}
             else:
                 return []
         except Exception as e:
-            self.logger.error(f"Error fetching models: {e}")
+            self.logger.error(f"Erreur lors de la récupération des modèles: {e}")
             return []
 
 class ResponseFormatter:
-    """Utility class for formatting chatbot responses."""
+    """Classe utilitaire pour formater les réponses du chatbot."""
     
     @staticmethod
     def format_for_streamlit(response_data: Dict[str, Any]) -> str:
         """
-        Format response for Streamlit display.
+        Formate la réponse pour l'affichage Streamlit.
         
         Args:
-            response_data: Response data from chatbot
+            response_data: Données de réponse du chatbot
             
         Returns:
-            Formatted response string
+            Chaîne de réponse formatée
         """
         response = response_data.get("response", "")
         
         if response_data.get("error"):
             return f"❌ **Erreur**: {response}"
         
-        # Add metadata footer if available
+        # Ajouter un pied de page avec métadonnées si disponible
         footer_parts = []
         
         if "sources_used" in response_data and response_data["sources_used"] > 0:
@@ -365,13 +343,13 @@ class ResponseFormatter:
     @staticmethod
     def extract_sources(search_results: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         """
-        Extract source information from search results.
+        Extrait les informations de source des résultats de recherche.
         
         Args:
-            search_results: Search results from vector database
+            search_results: Résultats de recherche de la base vectorielle
             
         Returns:
-            List of source information
+            Liste des informations de source
         """
         sources = []
         for result in search_results:
@@ -385,12 +363,12 @@ class ResponseFormatter:
         
         return sources
 
-# Example usage
+# Exemple d'utilisation
 if __name__ == "__main__":
-    # Initialize chatbot
-    chatbot = ChatBot()
+    # Initialiser le chatbot
+    chatbot = OllamaChatBot()
     
-    # Example search results (would come from vector database)
+    # Exemples de résultats de recherche (viendraient de la base vectorielle)
     example_search_results = [
         {
             'content': "L'intelligence artificielle est une technologie révolutionnaire...",
@@ -402,11 +380,11 @@ if __name__ == "__main__":
         }
     ]
     
-    # Generate response
+    # Générer une réponse
     response = chatbot.generate_response(
         user_question="Qu'est-ce que l'intelligence artificielle ?",
         search_results=example_search_results
     )
     
-    print("Response:", response["response"])
-    print("Model:", response.get("model", "N/A"))
+    print("Réponse:", response["response"])
+    print("Modèle:", response.get("model", "N/A"))
