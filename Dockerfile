@@ -19,7 +19,7 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
 # Installer les dépendances système essentielles
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     git \
@@ -35,12 +35,18 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libpng-dev \
     zlib1g-dev \
-    # Dépendances pour ChromeDriver/Selenium
-    chromium-browser \
-    chromium-driver \
-    # Nettoyage
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Installation conditionnelle de Chrome/Chromium (optionnelle pour le scraping avancé)
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends \
+    chromium \
+    chromium-driver \
+    || echo "⚠️ Chrome/Chromium non disponible, scraping JavaScript limité") && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Créer utilisateur non-root pour la sécurité
 RUN useradd --create-home --shell /bin/bash app \
@@ -98,7 +104,7 @@ ENV PYTHONPATH=/app \
 
 # Configurer ChromeDriver pour Selenium
 ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver \
-    CHROME_BIN=/usr/bin/chromium-browser
+    CHROME_BIN=/usr/bin/chromium
 
 # Passer à l'utilisateur non-root
 USER app
