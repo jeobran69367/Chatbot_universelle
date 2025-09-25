@@ -237,7 +237,7 @@ jobs:
       run: |
         # Initialiser l'environnement AZD si nécessaire
         if [ ! -f ".azure/${{ env.AZURE_ENV_NAME }}/.env" ]; then
-          azd env new ${{ env.AZURE_ENV_NAME }} --location ${{ vars.AZURE_LOCATION || 'eastus' }} --subscription $AZURE_SUBSCRIPTION_ID
+          azd env new ${{ env.AZURE_ENV_NAME }} --location ${{ vars.AZURE_LOCATION || 'eastus' }}
         fi
         
         azd config set alpha.resourceGroupDeployments on
@@ -252,13 +252,13 @@ jobs:
         azd env set CONTAINER_IMAGE chatbot-web-scraper:${{ github.sha }}
         
     - name: 🏗️ Provision Azure Infrastructure
-      run: azd provision --no-prompt --subscription $AZURE_SUBSCRIPTION_ID
+      run: azd provision --no-prompt
           
     - name: 🚀 Deploy Application
       id: deploy
       run: |
         # Déploiement avec azd
-        azd deploy --no-prompt --subscription $AZURE_SUBSCRIPTION_ID
+        azd deploy --no-prompt
         
         # Récupérer l'URL de l'application avec plusieurs tentatives
         APP_URL=""
