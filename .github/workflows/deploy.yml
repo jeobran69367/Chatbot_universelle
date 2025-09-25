@@ -43,10 +43,6 @@ jobs:
   test:
     name: 🧪 Tests & Quality Checks
     runs-on: ubuntu-latest
-
-    # Ne pas exécuter les tests sur les PR
-    if: github.event_name != 'pull_request'
-
     
     steps:
     - name: 📥 Checkout Code
@@ -118,8 +114,7 @@ jobs:
     name: 🐳 Build Docker Image
     runs-on: ubuntu-latest
     needs: test
-    # Ne pas exécuter les tests sur les PR
-    if: github.event_name != 'pull_request'
+    # Supprimer la condition pour permettre le build sur les PR
     
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
@@ -172,6 +167,7 @@ jobs:
     name: 🌐 Deploy to Azure
     runs-on: ubuntu-latest
     needs: [test, build]
+    if: github.event_name != 'pull_request'  # Ne déployer que sur push/manual
     
     outputs:
       uri: ${{ steps.deploy.outputs.uri }}
@@ -187,13 +183,11 @@ jobs:
       
     - name: 📥 Download Docker Image
       uses: actions/download-artifact@v4
-        # L'artifact n'existe que si pas une PR
       with:
         name: chatbot-docker-image
         path: /tmp
         
     - name: 🐳 Load Docker Image
-       # Charger seulement si l'artifact existe
       run: docker load --input /tmp/chatbot-image.tar
       
     - name: 🔑 Azure Login (OIDC)
@@ -327,6 +321,7 @@ jobs:
     name: 🧪 Integration Tests
     runs-on: ubuntu-latest
     needs: deploy
+    if: github.event_name != 'pull_request'  # Seulement après déploiement
     
     steps:
     - name: 📥 Checkout Code
