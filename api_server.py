@@ -160,7 +160,10 @@ def scrape_website():
 def status():
     """Status de l'API"""
     return jsonify({
-        'status': 'online',
+        'status': 'healthy',
+        'service': 'chatbot-web-scraper',
+        'version': '1.0.0',
+        'timestamp': app.config.get('startup_time', 'unknown'),
         'chatbot_ready': chatbot is not None,
         'vector_db_ready': vector_db is not None,
         'is_initialized': initialization_state['is_initialized'],
@@ -210,5 +213,7 @@ def widget_js():
     return response
 
 if __name__ == '__main__':
+    import datetime
+    app.config['startup_time'] = datetime.datetime.now().isoformat()
     initialize_chatbot()
     app.run(host='0.0.0.0', port=5001, debug=True)
