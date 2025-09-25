@@ -114,7 +114,7 @@ jobs:
     name: 🐳 Build Docker Image
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name != 'pull_request'
+    # Supprimer la condition pour permettre le build sur les PR
     
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
@@ -154,6 +154,7 @@ jobs:
         
     - name: 📤 Upload Docker Image
       uses: actions/upload-artifact@v4
+      if: github.event_name != 'pull_request'  # Seulement upload l'artifact si pas une PR
       with:
         name: chatbot-docker-image
         path: /tmp/chatbot-image.tar
@@ -182,11 +183,13 @@ jobs:
       
     - name: 📥 Download Docker Image
       uses: actions/download-artifact@v4
+      if: github.event_name != 'pull_request'  # L'artifact n'existe que si pas une PR
       with:
         name: chatbot-docker-image
         path: /tmp
         
     - name: 🐳 Load Docker Image
+      if: github.event_name != 'pull_request'  # Charger seulement si l'artifact existe
       run: docker load --input /tmp/chatbot-image.tar
       
     - name: 🔑 Azure Login (OIDC)
