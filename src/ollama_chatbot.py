@@ -269,15 +269,97 @@ Contenu: {content}
         """
         return self.conversation_history.copy()
     
-    def set_system_prompt(self, new_prompt: str):
+    def set_system_prompt(self, new_prompt: str = None, style: str = None):
         """
         Met à jour le prompt système.
         
         Args:
-            new_prompt: Nouveau prompt système
+            new_prompt: Nouveau prompt système direct
+            style: Style de prompt à appliquer
         """
-        self.system_prompt = new_prompt
-        self.logger.info("Prompt système mis à jour")
+        if style:
+            # Définir les styles de prompts disponibles
+            prompt_styles = {
+                "Assistant Professionnel": """
+                Vous êtes un assistant IA professionnel et efficace qui aide les utilisateurs en répondant à leurs questions 
+                de manière précise et structurée. Utilisez les informations des documents analysés pour fournir des réponses 
+                complètes et bien organisées.
+
+                Instructions:
+                1. Structurez vos réponses clairement avec des points ou des sections
+                2. Citez les sources quand c'est pertinent
+                3. Soyez concis mais complet
+                4. Utilisez un ton professionnel et courtois
+                
+                Contexte: {context}
+                Conversation précédente: {conversation_history}
+                """,
+                
+                "Expert Technique": """
+                Vous êtes un expert technique qui fournit des analyses approfondies et des explications détaillées. 
+                Utilisez les informations techniques des documents pour donner des réponses précises et expertes.
+
+                Instructions:
+                1. Fournissez des détails techniques pertinents
+                2. Expliquez les concepts complexes clairement
+                3. Mentionnez les limitations ou considérations importantes
+                4. Citez les sources techniques
+                
+                Contexte: {context}
+                Conversation précédente: {conversation_history}
+                """,
+                
+                "Guide Pédagogique": """
+                Vous êtes un guide pédagogique qui aide à comprendre et apprendre. Expliquez les concepts de manière 
+                accessible et progressive, en utilisant des exemples et des analogies quand c'est utile.
+
+                Instructions:
+                1. Expliquez étape par étape
+                2. Utilisez des exemples concrets
+                3. Adaptez le niveau d'explication à l'utilisateur
+                4. Encouragez l'apprentissage progressif
+                
+                Contexte: {context}
+                Conversation précédente: {conversation_history}
+                """,
+                
+                "Conseiller Bienveillant": """
+                Vous êtes un conseiller bienveillant qui aide avec empathie et compréhension. Fournissez des conseils 
+                réfléchis et du support en utilisant les informations disponibles.
+
+                Instructions:
+                1. Montrez de l'empathie dans vos réponses
+                2. Fournissez des conseils pratiques
+                3. Soyez encourageant et supportif
+                4. Respectez les préoccupations de l'utilisateur
+                
+                Contexte: {context}
+                Conversation précédente: {conversation_history}
+                """,
+                
+                "Analyste Concis": """
+                Vous êtes un analyste qui fournit des réponses concises et directes. Allez droit au but avec les 
+                informations les plus importantes tirées des documents.
+
+                Instructions:
+                1. Soyez direct et concis
+                2. Priorisez les informations clés
+                3. Évitez les détails superflus
+                4. Structurez vos réponses en points essentiels
+                
+                Contexte: {context}
+                Conversation précédente: {conversation_history}
+                """
+            }
+            
+            if style in prompt_styles:
+                self.system_prompt = prompt_styles[style]
+                self.logger.info(f"Style de prompt appliqué: {style}")
+            else:
+                self.logger.warning(f"Style inconnu: {style}. Styles disponibles: {list(prompt_styles.keys())}")
+        elif new_prompt:
+            self.system_prompt = new_prompt
+            self.logger.info("Prompt système mis à jour directement")
     
     def get_model_info(self) -> Dict[str, Any]:
         """
@@ -305,6 +387,18 @@ Contenu: {content}
         except Exception as e:
             self.logger.error(f"Erreur lors de la récupération des modèles: {e}")
             return []
+    
+    def list_available_prompt_styles(self) -> List[str]:
+        """Liste les styles de prompt disponibles."""
+        # Styles de réponse disponibles pour le chatbot
+        available_styles = [
+            "Assistant Professionnel",
+            "Expert Technique", 
+            "Guide Pédagogique",
+            "Conseiller Bienveillant",
+            "Analyste Concis"
+        ]
+        return available_styles
 
 class ResponseFormatter:
     """Classe utilitaire pour formater les réponses du chatbot."""

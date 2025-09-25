@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration du Chatbot IA</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .init-container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .init-header {
+            margin-bottom: 30px;
+        }
+
+        .init-header h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .init-header p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .url-input-section {
+            margin: 30px 0;
+        }
+
+        .url-input {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 50px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .url-input:focus {
+            border-color: #667eea;
+        }
+
+        .init-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.3s;
+            width: 100%;
+        }
+
+        .init-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .init-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-section {
+            display: none;
+            margin: 30px 0;
+        }
+
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .status-message {
+            color: #666;
+            font-style: italic;
+            margin: 10px 0;
+        }
+
+        .examples {
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .examples h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .example-url {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .example-url:hover {
+            background: #e9ecef;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #d63384;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .success-message {
+            background: #d1edff;
+            color: #0969da;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .chat-redirect {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .redirect-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+
+<div class="init-container">
+    <div class="init-header">
+        <h1>🤖 Configuration du Chatbot IA</h1>
+        <p>Pour commencer, veuillez fournir l'URL du site web que le chatbot doit analyser. Cela permettra à l'IA de comprendre le contexte et de fournir des réponses personnalisées.</p>
+    </div>
+
+    <div class="url-input-section">
+        <input type="url" 
+               class="url-input" 
+               id="websiteUrl" 
+               placeholder="https://exemple.com" 
+               required>
+        
+        <button class="init-button" id="analyzeButton" onclick="analyzeWebsite()">
+            🔍 Analyser le site web
+        </button>
+    </div>
+
+    <div class="examples">
+        <h3>💡 Exemples d'URLs :</h3>
+        <div class="example-url" onclick="setExampleUrl('https://www.lemonde.fr')">
+            https://www.lemonde.fr
+        </div>
+        <div class="example-url" onclick="setExampleUrl('https://www.wikipedia.org')">
+            https://www.wikipedia.org
+        </div>
+        <div class="example-url" onclick="setExampleUrl('https://docs.python.org')">
+            https://docs.python.org
+        </div>
+    </div>
+
+    <div class="progress-section" id="progressSection">
+        <div class="status-message" id="statusMessage">Analyse en cours...</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+    <div class="success-message" id="successMessage"></div>
+
+    <div class="chat-redirect" id="chatRedirect">
+        <h3>✅ Configuration terminée !</h3>
+        <p>Votre chatbot est maintenant prêt à répondre à vos questions.</p>
+        <a href="chat" class="redirect-button pulse">
+            💬 Commencer le chat
+        </a>
+    </div>
+</div>
+
+<script>
+    const API_BASE_URL = 'http://localhost:5001/api';
+    let analysisInProgress = false;
+
+    function setExampleUrl(url) {
+        document.getElementById('websiteUrl').value = url;
+    }
+
+    async function analyzeWebsite() {
+        if (analysisInProgress) return;
+
+        const urlInput = document.getElementById('websiteUrl');
+        const url = urlInput.value.trim();
+        
+        if (!url) {
+            showError('Veuillez entrer une URL valide.');
+            return;
+        }
+
+        if (!isValidUrl(url)) {
+            showError('Format d\'URL invalide. Utilisez le format: https://exemple.com');
+            return;
+        }
+
+        analysisInProgress = true;
+        hideMessages();
+        showProgress();
+        updateStatus('Connexion au site web...');
+        setProgress(20);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/init`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url: url })
+            });
+
+            updateStatus('Extraction du contenu...');
+            setProgress(50);
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                updateStatus('Création de la base de connaissances...');
+                setProgress(80);
+                
+                // Simuler le temps de traitement
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                updateStatus('Configuration terminée !');
+                setProgress(100);
+                
+                setTimeout(() => {
+                    showSuccess(`Site web analysé avec succès !\n\nContenu extrait: ${data.summary || 'Données collectées'}\n\nLe chatbot est maintenant configuré et prêt à utiliser.`);
+                    showChatRedirect();
+                    hideProgress();
+                }, 1000);
+                
+            } else {
+                throw new Error('Erreur lors de l\'analyse du site web');
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            showError('Impossible d\'analyser le site web. Vérifiez l\'URL et réessayez.');
+            hideProgress();
+        } finally {
+            analysisInProgress = false;
+        }
+    }
+
+    function isValidUrl(string) {
+        try {
+            new URL(string);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function showProgress() {
+        document.getElementById('progressSection').style.display = 'block';
+        document.getElementById('analyzeButton').disabled = true;
+        document.getElementById('analyzeButton').textContent = '⏳ Analyse en cours...';
+    }
+
+    function hideProgress() {
+        document.getElementById('progressSection').style.display = 'none';
+        document.getElementById('analyzeButton').disabled = false;
+        document.getElementById('analyzeButton').textContent = '🔍 Analyser le site web';
+    }
+
+    function updateStatus(message) {
+        document.getElementById('statusMessage').textContent = message;
+    }
+
+    function setProgress(percentage) {
+        document.getElementById('progressFill').style.width = percentage + '%';
+    }
+
+    function showError(message) {
+        const errorDiv = document.getElementById('errorMessage');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+
+    function showSuccess(message) {
+        const successDiv = document.getElementById('successMessage');
+        successDiv.textContent = message;
+        successDiv.style.display = 'block';
+    }
+
+    function hideMessages() {
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'none';
+    }
+
+    function showChatRedirect() {
+        document.getElementById('chatRedirect').style.display = 'block';
+    }
+
+    // Auto-focus sur l'input
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('websiteUrl').focus();
+    });
+
+    // Validation en temps réel
+    document.getElementById('websiteUrl').addEventListener('input', function() {
+        hideMessages();
+    });
+
+    // Entrée pour valider
+    document.getElementById('websiteUrl').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !analysisInProgress) {
+            analyzeWebsite();
+        }
+    });
+</script>
+
+</body>
+</html>

@@ -99,6 +99,19 @@ STREAMLIT_THEME_BACKGROUND_COLOR=#FFFFFF
 
 ### 7. Lancer l'application
 
+**🔍 Vérification rapide avant de commencer :**
+```bash
+# Vérifier qu'Ollama fonctionne
+ollama list
+
+# Tester un modèle
+ollama run llama3.1:latest "Bonjour, comment ça va ?"
+
+# Vérifier l'environnement Python
+source .venv/bin/activate
+python -c "import streamlit, chromadb, sentence_transformers; print('✅ Tous les modules OK')"
+```
+
 **Option 1 : Avec l'environnement virtuel activé**
 ```bash
 source .venv/bin/activate  # Sur macOS/Linux
@@ -119,6 +132,10 @@ streamlit run app.py
 chmod +x start_chatbot.sh
 ./start_chatbot.sh
 ```
+
+**🚀 Accès à l'application :**
+- Interface web : http://localhost:8501
+- L'application se lance automatiquement dans votre navigateur
 
 ## 🚀 Utilisation
 
