@@ -36,6 +36,7 @@ MANIFEST
 .env.staging
 *.key
 *.pem
+*.md
 
 # Données de l'application
 data/scraped/*.json
