@@ -220,11 +220,14 @@ jobs:
         
     - name: 🔐 Configure AZD Authentication
       run: |
-        # AZD utilise les variables d'environnement Azure pour l'authentification OIDC
+        # Authentification AZD via service principal (OIDC)
         echo "🔑 Configuration de l'authentification AZD avec OIDC..."
         
-        # Les variables d'environnement sont déjà définies au niveau du job
-        echo "✅ Variables d'environnement Azure configurées"
+        # Utiliser les mêmes credentials que l'Azure CLI
+        azd auth login --client-id $AZURE_CLIENT_ID --tenant-id $AZURE_TENANT_ID --federated-credential-provider "github" --check-only || \
+        azd auth login --client-id $AZURE_CLIENT_ID --tenant-id $AZURE_TENANT_ID --federated-credential-provider "github"
+        
+        echo "✅ AZD authentifié avec succès"
         echo "📋 AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:0:8}..."
         echo "📋 AZURE_TENANT_ID: ${AZURE_TENANT_ID:0:8}..."
         echo "📋 AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID:0:8}..."
