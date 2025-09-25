@@ -193,9 +193,9 @@ jobs:
     - name: 🔑 Azure Login (OIDC)
       uses: azure/login@v2
       with:
-        client-id: ${{ env.AZURE_CLIENT_ID }}
-        tenant-id: ${{ env.AZURE_TENANT_ID }}
-        subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         
     - name: 🛠️ Setup Azure Developer CLI
       uses: Azure/setup-azd@v1.0.0
@@ -204,7 +204,7 @@ jobs:
       run: |
         # Initialiser l'environnement AZD si nécessaire
         if [ ! -f ".azure/${{ env.AZURE_ENV_NAME }}/.env" ]; then
-          azd env new ${{ env.AZURE_ENV_NAME }} --location ${{ vars.AZURE_LOCATION || 'eastus' }} --subscription ${{ env.AZURE_SUBSCRIPTION_ID }}
+          azd env new ${{ env.AZURE_ENV_NAME }} --location ${{ vars.AZURE_LOCATION || 'eastus' }} --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         fi
         
         azd config set alpha.resourceGroupDeployments on
@@ -212,7 +212,7 @@ jobs:
         # Configuration des variables d'environnement
         azd env set AZURE_ENV_NAME ${{ env.AZURE_ENV_NAME }}
         azd env set AZURE_LOCATION ${{ vars.AZURE_LOCATION || 'eastus' }}
-        azd env set AZURE_SUBSCRIPTION_ID ${{ env.AZURE_SUBSCRIPTION_ID }}
+        azd env set AZURE_SUBSCRIPTION_ID ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         
         # Variables spécifiques à l'application
         azd env set APP_VERSION ${{ github.sha }}
