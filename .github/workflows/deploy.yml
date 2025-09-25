@@ -9,8 +9,45 @@ on:
     paths-ignore:
       - '**.md'
       - '.gitignore'
-      - 'LICENSE'
-  pull_request:
+      - name: 🔧 Configure AZD Environment
+      run: |
+        # Définir le nom du groupe de ressources
+        RESOURCE_GROUP_NAME="rg-${{ env.AZURE_ENV_NAME }}-chatbot"
+        LOCATION="${{ vars.AZURE_LOCATION || 'eastus' }}"
+        
+        # Créer le groupe de ressources s'il n'existe pas
+        echo "🔧 Vérification/création du groupe de ressources: $RESOURCE_GROUP_NAME"
+        if ! az group show --name "$RESOURCE_GROUP_NAME" --output none 2>/dev/null; then
+          echo "📦 Création du groupe de ressources: $RESOURCE_GROUP_NAME dans $LOCATION"
+          az group create --name "$RESOURCE_GROUP_NAME" --location "$LOCATION" --tags azd-env-name=${{ env.AZURE_ENV_NAME }}
+        else
+          echo "✅ Groupe de ressources existant: $RESOURCE_GROUP_NAME"
+        fi
+        
+        # Initialiser l'environnement AZD si nécessaire
+        if [ ! -f ".azure/${{ env.AZURE_ENV_NAME }}/.env" ]; then
+          echo "🔧 Création de l'environnement AZD: ${{ env.AZURE_ENV_NAME }}"
+          azd env new ${{ env.AZURE_ENV_NAME }} --location "$LOCATION"
+        fi
+        
+        # Configuration AZD
+        azd config set alpha.resourceGroupDeployments on
+        
+        # Configuration des variables d'environnement critiques
+        echo "🔧 Configuration des variables d'environnement AZD..."
+        azd env set AZURE_ENV_NAME ${{ env.AZURE_ENV_NAME }}
+        azd env set AZURE_LOCATION "$LOCATION"
+        azd env set AZURE_SUBSCRIPTION_ID ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        azd env set AZURE_RESOURCE_GROUP "$RESOURCE_GROUP_NAME"
+        
+        # Variables spécifiques à l'application
+        azd env set APP_VERSION ${{ github.sha }}
+        azd env set CONTAINER_IMAGE chatbot-web-scraper:${{ github.sha }}
+        
+        echo "✅ Configuration AZD terminée"
+        echo "📋 Environnement: ${{ env.AZURE_ENV_NAME }}"
+        echo "📋 Resource Group: $RESOURCE_GROUP_NAME"
+        echo "📋 Location: $LOCATION" pull_request:
     branches: [ main ]
   workflow_dispatch:
     inputs:
