@@ -187,13 +187,13 @@ jobs:
       
     - name: 📥 Download Docker Image
       uses: actions/download-artifact@v4
-      if: github.event_name != 'pull_request'  # L'artifact n'existe que si pas une PR
+        # L'artifact n'existe que si pas une PR
       with:
         name: chatbot-docker-image
         path: /tmp
         
     - name: 🐳 Load Docker Image
-      if: github.event_name != 'pull_request'  # Charger seulement si l'artifact existe
+       # Charger seulement si l'artifact existe
       run: docker load --input /tmp/chatbot-image.tar
       
     - name: 🔑 Azure Login (OIDC)
